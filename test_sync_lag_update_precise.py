@@ -6,12 +6,14 @@ import matplotlib.pyplot as plt
 import csv
 
 # global variables
-DB_NAME = "syncdb_test_3"
+DB_NAME = "syncdb_test_5"
 TABLE_NAME = "test"
 SNAPSHOT_SIZE =  10 * 10000
 DML_THREAD_NUM = 5
-DML_NUM_PER_THREAD = 1000000000
+DML_NUM_PER_THREAD = 10000000000
 DML_TOTAL = 0
+DO_SNAPSHOT = True
+DO_DML = True
 
 MYSQL_USER = "root"
 MYSQL_PASSWORD = "Jk37373737"
@@ -22,9 +24,9 @@ FOXLAKE_USER = "foxlake_root"
 FOXLAKE_PASSWORD = "foxlake2023"
 FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
-FOXLAKE_STORAGE_NAME = "storage_sync_lag_108"
+FOXLAKE_STORAGE_NAME = "storage_sync_lag_111"
 # FOXLAKE_STORAGE_URI = f'''s3://foxlake/test_sync/{FOXLAKE_STORAGE_NAME}'''
-FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
+FOXLAKE_STORAGE_URI = f'''s3c://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 # FOXLAKE_STORAGE_ENDPOINT = "s3.cn-northwest-1.amazonaws.com.cn"
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 # FOXLAKE_STORAGE_ID = "AKIAWSVSB2URE6ZU6R5Q"
@@ -43,45 +45,7 @@ select_bytes_query = "SHOW GLOBAL STATUS LIKE 'Bytes_received'"
 
 update_lock = threading.Lock()
 
-# SELECT MAX(TIME) FROM `DB.TABLE||cdc `
-# USING
-#     URL 'minio://127.0.0.1:9000/foxlakebucket/storage_sync_lag_101/syncdb_test_1113/foxdt/'
-#         CREDENTIALS = (            access_key_id = 'ROOTUSER'
-#             secret_access_key = 'CHANGEME123'
-# )
-#         FILES = ('cdc/test/log/')
-#         FILE_FORMAT = (            type = 'DML_CHANGE_LOG'
-#             for_internal_sql = false
-# )
-select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
-
-select_time_query_cdc_real = ''' \
-WITH t_cdc_last AS( \
-  SELECT \
-  	LAST(pk ORDER BY `cdc_log_sequence `) AS pk,  \
-  	LAST(str ORDER BY `cdc_log_sequence `) AS str,  \
-    LAST(num ORDER BY `cdc_log_sequence `) AS num,  \
-  	LAST(name ORDER BY `cdc_log_sequence `) AS name,  \
-  	LAST(time ORDER BY `cdc_log_sequence `) AS time,  \
-  	LAST(`cdc_action ` ORDER BY `cdc_log_sequence `) AS `cdc_action ` \
-  FROM `test||cdc `''' + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)" + '''GROUP BY pk \
-), \
-test_new AS( \
-SELECT \
-	COALESCE(t_cdc_last.pk, test.pk) AS pk, \
-	COALESCE(t_cdc_last.str, test.str) AS str, \
-    COALESCE(t_cdc_last.num, test.num) AS num, \
-	COALESCE(t_cdc_last.name, test.name) AS name, \
-    COALESCE(t_cdc_last.time, test.time) AS time, \
-    COALESCE(t_cdc_last.`cdc_action `, -1) AS `cdc_action_new ` \
-FROM test \
-FULL JOIN t_cdc_last \
-ON test.pk = t_cdc_last.pk \
-GROUP BY pk \
-HAVING `cdc_action_new ` = -1 OR `cdc_action_new ` = 1 OR `cdc_action_new ` = 0 \
-) \
-SELECT MAX(time) FROM test_new;
-'''
+select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''s3c://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
 
 select_num_query = "SELECT COUNT(*) FROM " + "`" + DB_NAME + "`" + "." + "`" + TABLE_NAME + "`"
 
@@ -94,7 +58,7 @@ scan_time = []
     Wait for synchronization completed.
     `timewait` should better be a little bigger than `flushInterval` in foxdt.
 """
-def wait_sync(foxlake_cursor, interval: float=1, timewait=5, timeout=300):
+def wait_sync(foxlake_cursor, interval: float=1, timewait=40, timeout=300):
     begin = time.time()
     prev_applied_id = 0
     while time.time() - begin < timeout:
@@ -247,28 +211,30 @@ def test_sync():
     mysql_conn = mysql.connector.connect(user=MYSQL_USER, password=MYSQL_PASSWORD, host=MYSQL_HOST, port=MYSQL_PORT,  autocommit=True)
     conn_lock.release()
     mysql_cursor = mysql_conn.cursor()
-    print(f'''[{format_cur_time()}]: Drop database '{DB_NAME}' in mysql''')
-    mysql_cursor.execute(f'DROP DATABASE IF EXISTS {DB_NAME}')
-    print(f'''[{format_cur_time()}]: Create database '{DB_NAME}' in mysql''')
-    mysql_cursor.execute(f'CREATE DATABASE {DB_NAME}')
-    mysql_cursor.execute(f'USE {DB_NAME}')
-    print(f'''[{format_cur_time()}]: Create table '{DB_NAME}.{TABLE_NAME}' in mysql''')
-    mysql_cursor.execute(f'''
-        CREATE TABLE {TABLE_NAME} (
-            pk INT,
-            str VARCHAR(64) NOT NULL,
-            num FLOAT NOT NULL,
-            name TEXT NOT NULL,
-            time DOUBLE NOT NULL,
-            PRIMARY KEY(pk),
-            INDEX idx_time (time)
-    ) ''')
 
-    print(f'[{format_cur_time()}]: Create snapshot in mysql')
-    for i in range(1, SNAPSHOT_SIZE+1):
-        num = random.randint(1, 10000)
-        mysql_cursor.execute(f'''INSERT INTO {TABLE_NAME} VALUES({i}, "str", {num}, "name", {get_cur_time()})''')
-    print(f'[{format_cur_time()}]: Finish mysql snapshot')
+    if DO_SNAPSHOT:
+        print(f'''[{format_cur_time()}]: Drop database '{DB_NAME}' in mysql''')
+        mysql_cursor.execute(f'DROP DATABASE IF EXISTS {DB_NAME}')
+        print(f'''[{format_cur_time()}]: Create database '{DB_NAME}' in mysql''')
+        mysql_cursor.execute(f'CREATE DATABASE {DB_NAME}')
+        mysql_cursor.execute(f'USE {DB_NAME}')
+        print(f'''[{format_cur_time()}]: Create table '{DB_NAME}.{TABLE_NAME}' in mysql''')
+        mysql_cursor.execute(f'''
+            CREATE TABLE {TABLE_NAME} (
+                pk INT,
+                str VARCHAR(64) NOT NULL,
+                num FLOAT NOT NULL,
+                name TEXT NOT NULL,
+                time DOUBLE NOT NULL,
+                PRIMARY KEY(pk),
+                INDEX idx_time (time)
+        ) ''')
+
+        print(f'[{format_cur_time()}]: Create snapshot in mysql')
+        for i in range(1, SNAPSHOT_SIZE+1):
+            num = random.randint(1, 10000)
+            mysql_cursor.execute(f'''INSERT INTO {TABLE_NAME} VALUES({i}, "str", {num}, "name", {get_cur_time()})''')
+        print(f'[{format_cur_time()}]: Finish mysql snapshot')
 
     print(f'[{format_cur_time()}]: Connect to foxlake')
     conn_lock.acquire()
@@ -276,23 +242,24 @@ def test_sync():
     conn_lock.release()
     foxlake_cursor = foxlake_conn.cursor()
 
-    print(f'[{format_cur_time()}]: Create storage in foxlake')
-    foxlake_cursor.execute(f'''
-        CREATE OR REPLACE STORAGE {FOXLAKE_STORAGE_NAME}
-        AT URI '{FOXLAKE_STORAGE_URI}'
-        ENDPOINT = '{FOXLAKE_STORAGE_ENDPOINT}'
-        CREDENTIALS {FOXLAKE_STORAGE_CREDENTIALS};
-    ''')
+    if DO_SNAPSHOT:
+        print(f'[{format_cur_time()}]: Create storage in foxlake')
+        foxlake_cursor.execute(f'''
+            CREATE OR REPLACE STORAGE {FOXLAKE_STORAGE_NAME}
+            AT URI '{FOXLAKE_STORAGE_URI}'
+            ENDPOINT = '{FOXLAKE_STORAGE_ENDPOINT}'
+            CREDENTIALS {FOXLAKE_STORAGE_CREDENTIALS};
+        ''')
 
-    print(f'''[{format_cur_time()}]: Drop database '{DB_NAME}' in foxlake''')
-    foxlake_cursor.execute(f'DROP DATABASE IF EXISTS {DB_NAME}')
+        print(f'''[{format_cur_time()}]: Drop database '{DB_NAME}' in foxlake''')
+        foxlake_cursor.execute(f'DROP DATABASE IF EXISTS {DB_NAME}')
 
-    print(f'''[{format_cur_time()}]: Create synchronized database '{DB_NAME}' in foxlake''')
-    foxlake_cursor.execute(f'''
-        CREATE SYNCHRONIZED DATABASE {DB_NAME}
-        DATASOURCE = '{FOXLAKE_DATASOURCE}'
-        ENGINE = '{FOXLAKE_ENGINE}';
-    ''')
+        print(f'''[{format_cur_time()}]: Create synchronized database '{DB_NAME}' in foxlake''')
+        foxlake_cursor.execute(f'''
+            CREATE SYNCHRONIZED DATABASE {DB_NAME}
+            DATASOURCE = '{FOXLAKE_DATASOURCE}'
+            ENGINE = '{FOXLAKE_ENGINE}';
+        ''')
 
     foxlake_cursor.execute(f'use {DB_NAME}')
 
@@ -313,15 +280,16 @@ def test_sync():
     # check_num_thread.daemon = True
     # check_num_thread.start()
 
-    print(f'''[{format_cur_time()}]: Start DML threads''')
-    dml_threads = []
-    for i in range(DML_THREAD_NUM):
-        dml_threads.append(threading.Thread(target=do_dml, args=(DML_NUM_PER_THREAD, i+1)))
-        dml_threads[i].daemon = True
-        dml_threads[i].start()
+    if DO_DML:
+        print(f'''[{format_cur_time()}]: Start DML threads''')
+        dml_threads = []
+        for i in range(DML_THREAD_NUM):
+            dml_threads.append(threading.Thread(target=do_dml, args=(DML_NUM_PER_THREAD, i+1)))
+            dml_threads[i].daemon = True
+            dml_threads[i].start()
 
     while True:
-        time.sleep(60)
+        time.sleep(120)
         # Plot the data
         fig, ax1 = plt.subplots()
         ax1.plot(times, lags, 'r-', label="Lag")
@@ -329,8 +297,8 @@ def test_sync():
         ax1.tick_params(axis='y')
 
         ax2 = ax1.twinx()
-        ax2.plot(times, qpss, 'b-', label="QPS")
-        ax2.set_ylabel("QPS")
+        ax2.plot(times, scan_time, 'b-', label="Scan Latency")
+        ax2.set_ylabel("Scan Latency(s)")
         ax2.tick_params(axis='y')
 
         lines = [ax1.get_lines()[0], ax2.get_lines()[0]]
@@ -339,25 +307,25 @@ def test_sync():
         # set the x label to `time`
         ax1.set_xlabel("Time(s)")
 
-        plt.title("Lag and QPS")
+        plt.title("Lag and Scan Latency")
         plt.show()
 
 
-        csv_filename = "imd_no_delta.csv"
-        data = list(zip(times, lags))
+        # csv_filename = "imd_no_delta_1kw.csv"
+        # data = list(zip(times, lags))
 
-        with open(csv_filename, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["Time", "Lag"])
-            writer.writerows(data)
+        # with open(csv_filename, mode='w', newline='') as file:
+        #     writer = csv.writer(file)
+        #     writer.writerow(["Time", "Lag"])
+        #     writer.writerows(data)
 
-        csv_filename = "imd_no_delta_scan.csv"
-        data = list(zip(times, scan_time))
+        # csv_filename = "scd_no_delta_scan_1kw.csv"
+        # data = list(zip(times, scan_time))
 
-        with open(csv_filename, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["Time", "Scan"])
-            writer.writerows(data)
+        # with open(csv_filename, mode='w', newline='') as file:
+        #     writer = csv.writer(file)
+        #     writer.writerow(["Time", "Scan"])
+        #     writer.writerows(data)
 
     for i in range(DML_THREAD_NUM):
         dml_threads[i].join()

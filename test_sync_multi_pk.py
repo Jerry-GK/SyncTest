@@ -20,7 +20,7 @@ FOXLAKE_PASSWORD = "foxlake2023"
 FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
 FOXLAKE_STORAGE_NAME = "storage_sync"
-FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
+FOXLAKE_STORAGE_URI = f'''s3c://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 FOXLAKE_STORAGE_ID = "ROOTUSER"
 FOXLAKE_STORAGE_KEY = "CHANGEME123"
@@ -157,7 +157,7 @@ def test_sync():
             str VARCHAR(64) NOT NULL,
             num FLOAT NOT NULL,
             name TEXT NOT NULL,
-            PRIMARY KEY(pk)
+            PRIMARY KEY(pk, num)
     ) ''')
 
     print(f'[{format_cur_time()}]: Create snapshot in mysql')

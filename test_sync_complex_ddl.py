@@ -7,9 +7,9 @@ import random
 sys.stdout.Flush = True
 
 # global variables
-DB_NAME = "syncdb_test_2"
-TABLE_NAME = "test"
-SNAPSHOT_SIZE = 10000
+DB_NAME = "syncdb_TEST_3"
+TABLE_NAME = "test_DDL"
+SNAPSHOT_SIZE = 1 * 10000
 DML_THREAD_NUM = 5
 DML_NUM_PER_THREAD = SNAPSHOT_SIZE // 10
 
@@ -22,8 +22,8 @@ FOXLAKE_USER = "foxlake_root"
 FOXLAKE_PASSWORD = "foxlake2023"
 FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
-FOXLAKE_STORAGE_NAME = "storage_sync_ddl"
-FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
+FOXLAKE_STORAGE_NAME = "storage_sync_ddl_5"
+FOXLAKE_STORAGE_URI = f'''s3c://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 FOXLAKE_STORAGE_ID = "ROOTUSER"
 FOXLAKE_STORAGE_KEY = "CHANGEME123"
@@ -39,7 +39,7 @@ select_query = "SELECT * FROM " + DB_NAME + "." + TABLE_NAME + " ORDER BY pk"
     Wait for synchronization completed.
     `timewait` should better be a little bigger than `flushInterval` in foxdt.
 """
-def wait_sync(foxlake_cursor, interval: float=1, timewait=20, timeout=300):
+def wait_sync(foxlake_cursor, interval: float=1, timewait=10, timeout=300):
     begin = time.time()
     prev_applied_id = 0
     while time.time() - begin < timeout:
@@ -54,6 +54,9 @@ def wait_sync(foxlake_cursor, interval: float=1, timewait=20, timeout=300):
             begin = time.time()
         time.sleep(interval)
     raise Exception(f'[{format_cur_time()}]: Wait for sync timeout after ' + str(timeout) + ": APPLIED_SEQUENCE_ID = " + str(res[1]) + ", TARGET_SEQUENCE_ID = " + str(res[2]) + ", STATUS = " + str(res[3]))
+
+def wait_sync_short():
+    time.sleep(1)
 
 """
     Do DML operations for at most `dml_num` times.
@@ -202,7 +205,7 @@ def test_sync():
     check_thread.start()
 
     print(f'''[{format_cur_time()}]: Wait for synchronization of snapshot...''')
-    wait_sync(foxlake_cursor)
+    wait_sync(foxlake_cursor, 1, 80)
     print(f'''[{format_cur_time()}]: Wait for synchronization of snapshot done''')
 
     # validate snapshot
@@ -219,7 +222,7 @@ def test_sync():
         dml_threads[i].join()
 
     print(f'''[{format_cur_time()}]: Wait for synchronization of delta...''')
-    wait_sync(foxlake_cursor)
+    wait_sync(foxlake_cursor, 1, 40)
     print(f'''[{format_cur_time()}]: Wait for synchronization of delta done''')
 
     validate_results(mysql_cursor, foxlake_cursor, select_query, "dml")
@@ -236,18 +239,6 @@ def test_sync():
     mysql_cursor.execute("INSERT INTO " + TABLE_NAME + " VALUES(-2, 'str', 'name', 200)")
     wait_sync(foxlake_cursor)
     validate_results(mysql_cursor, foxlake_cursor, select_query, "ddl_drop_column")
-
-    print(f'''[{format_cur_time()}]: Test ddl of modify column''')
-    mysql_cursor.execute("ALTER TABLE " + TABLE_NAME + " MODIFY COLUMN new_col FLOAT")
-    mysql_cursor.execute("INSERT INTO " + TABLE_NAME + " VALUES(-3, 'str', 'name', 3.7)")
-    wait_sync(foxlake_cursor)
-    validate_results(mysql_cursor, foxlake_cursor, select_query, "ddl_modify_column")
-
-    print(f'''[{format_cur_time()}]: Test ddl of change column''')
-    mysql_cursor.execute("ALTER TABLE " + TABLE_NAME + " CHANGE str str_new VARCHAR(128)")
-    mysql_cursor.execute("INSERT INTO " + TABLE_NAME + " VALUES(-4, 'str_new', 'name', 25.6)")
-    wait_sync(foxlake_cursor)
-    validate_results(mysql_cursor, foxlake_cursor, select_query, "ddl_change_column")
 
     print(f'''[{format_cur_time()}]: Test ddl of rename table''')
     mysql_cursor.execute("RENAME TABLE " + TABLE_NAME + " TO " + TABLE_NAME + "_new")

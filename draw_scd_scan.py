@@ -1,28 +1,23 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df_scd_no_delta = pd.read_csv('scd_scan_no_delta.csv')
-df_scd_s3delta = pd.read_csv('scd_scan_s3delta.csv')
-df_scd = pd.read_csv('scd_scan.csv')
+df_scd_no_delta = pd.read_csv('no_3ld_scan.csv')
+df_scd = pd.read_csv('3ld_scan.csv')
 
 time_scd_no_delta = df_scd_no_delta['Time']
 scan_scd_no_delta = df_scd_no_delta['Scan'] * 1000
-
-time_scd_s3delta = df_scd_s3delta['Time']
-scan_scd_s3delta = df_scd_s3delta['Scan'] * 1000
 
 time_scd = df_scd['Time']
 scan_scd = df_scd['Scan'] * 1000
 
 scan_scd_no_delta_mean = scan_scd_no_delta.expanding().mean()
-scan_scd_s3delta_mean = scan_scd_s3delta.expanding().mean()
 scan_scd_mean = scan_scd.expanding().mean()
 
 # x start at 5
 plt.xlim(10, 130)
-plt.ylim(0, 800)
+plt.ylim(0, 8000)
 plt.xticks(range(10, 140, 10))
-plt.yticks(range(0, 800, 100))
+plt.yticks(range(0, 8000, 100))
 
 plt.plot(time_scd_no_delta, scan_scd_no_delta, label='No SCD', color='blue')
 # plt.plot(time_scd_s3delta, scan_scd_s3delta, label='SCD + S3Delta', color='green')

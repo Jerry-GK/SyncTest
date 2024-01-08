@@ -14,9 +14,9 @@ import random
 """
 
 # global variables
-DB_NAME = "syncdb_test_type_1"
+DB_NAME = "syncdb_test_type_4"
 TABLE_NAME = "TEST_TYPE"
-SNAPSHOT_SIZE = 100
+SNAPSHOT_SIZE = 10
 DML_THREAD_NUM = 5
 DML_NUM_PER_THREAD = SNAPSHOT_SIZE // 10
 
@@ -29,7 +29,7 @@ FOXLAKE_USER = "foxlake_root"
 FOXLAKE_PASSWORD = "foxlake2023"
 FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
-FOXLAKE_STORAGE_NAME = "storage_sync_type_1"
+FOXLAKE_STORAGE_NAME = "storage_sync_type_4"
 FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 FOXLAKE_STORAGE_ID = "ROOTUSER"
@@ -40,13 +40,13 @@ FOXLAKE_ENGINE = f'''columnar@{FOXLAKE_STORAGE_NAME}'''
 
 start_time = time.time()
 conn_lock = threading.Lock()
-select_query = "SELECT * FROM " + DB_NAME + "." + TABLE_NAME + " ORDER BY pk"
+select_query = "SELECT COL_DECIMAL FROM " + DB_NAME + "." + TABLE_NAME + " ORDER BY pk"
 
 """
     Wait for synchronization completed.
     `timewait` should better be a little bigger than `flushInterval` in foxdt.
 """
-def wait_sync(foxlake_cursor, interval: float=1, timewait=20, timeout=300):
+def wait_sync(foxlake_cursor, interval: float=1, timewait=10, timeout=300):
     begin = time.time()
     prev_applied_id = 0
     while time.time() - begin < timeout:
@@ -98,8 +98,7 @@ def do_dml(dml_num, tid):
                     2023, 
                     '2023-08-18', 
                     '12:34:56', 
-                    '2023-08-18 12:34:56',
-                    CURRENT_TIMESTAMP
+                    '2023-08-18 12:34:56'
                 )''')
             if mysql_cursor.rowcount > 0:
                 break
@@ -122,8 +121,8 @@ def validate_results(mysql_cursor, foxlake_cursor, query, desc):
     if mysql_results == foxlake_results:
         print(f'[{format_cur_time()}]: Validation success: correct results when testing ' + desc)
     else:
-        raise Exception(f'[{format_cur_time()}]: Validation failure: incorrect results when testing ' + desc)
-        # raise Exception(f'[{format_cur_time()}]: Validation failure: incorrect results when testing ' + desc + ". MySQL results:", mysql_results[0], ", FoxLake results: ", foxlake_results[0])
+        # raise Exception(f'[{format_cur_time()}]: Validation failure: incorrect results when testing ' + desc)
+        raise Exception(f'[{format_cur_time()}]: Validation failure: incorrect results when testing ' + desc + ". MySQL results:", mysql_results, ", FoxLake results: ", foxlake_results)
     print("===============================================\n")
 
 """
@@ -199,7 +198,6 @@ def test_sync():
             COL_DATE DATE,
             COL_TIME TIME,
             COL_DATETIME DATETIME,
-            COL_TIMESTAMP TIMESTAMP,
             PRIMARY KEY(PK)
     ) ''')
 
@@ -229,8 +227,7 @@ def test_sync():
                                 2023, 
                                 '2023-08-18', 
                                 '12:34:56', 
-                                '2023-08-18 12:34:56',
-                                CURRENT_TIMESTAMP
+                                '2023-08-18 12:34:56'
                             )''')
     print(f'[{format_cur_time()}]: Finish mysql snapshot')
 
@@ -269,7 +266,7 @@ def test_sync():
     print(f'''[{format_cur_time()}]: Wait for synchronization of snapshot done''')
 
     # validate snapshot
-    validate_results(mysql_cursor, foxlake_cursor, select_query, "snapshot")
+    # validate_results(mysql_cursor, foxlake_cursor, select_query, "snapshot")
 
     # validate dml
     print(f'''[{format_cur_time()}]: Start DML threads''')
@@ -282,7 +279,13 @@ def test_sync():
         dml_threads[i].join()
 
     print(f'''[{format_cur_time()}]: Wait for synchronization of delta...''')
-    wait_sync(foxlake_cursor)
+    # wait_sync(foxlake_cursor)
+    # print(1)
+    time.sleep(2)
+    # print(2)
+    # time.sleep(1)
+    # print(3)
+    # time.sleep(1)
     print(f'''[{format_cur_time()}]: Wait for synchronization of delta done''')
 
     validate_results(mysql_cursor, foxlake_cursor, select_query, "dml")

@@ -1,8 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df_scd_no_delta = pd.read_csv('scd_no_delta.csv')
-df_scd_s3delta = pd.read_csv('scd_s3delta.csv')
+df_scd_no_delta = pd.read_csv('3ld_lag.csv')
+df_scd_s3delta = pd.read_csv('no_3ld_lag.csv')
 df_scd = pd.read_csv('scd.csv')
 
 time_scd_no_delta = df_scd_no_delta['Time']

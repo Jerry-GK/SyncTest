@@ -24,7 +24,7 @@ FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
 FOXLAKE_STORAGE_NAME = "storage_sync_lag_101"
 # FOXLAKE_STORAGE_URI = f'''s3://foxlake/test_sync/{FOXLAKE_STORAGE_NAME}'''
-FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
+FOXLAKE_STORAGE_URI = f'''s3c://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 # FOXLAKE_STORAGE_ENDPOINT = "s3.cn-northwest-1.amazonaws.com.cn"
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 # FOXLAKE_STORAGE_ID = "AKIAWSVSB2URE6ZU6R5Q"
@@ -37,48 +37,9 @@ FOXLAKE_ENGINE = f'''columnar@{FOXLAKE_STORAGE_NAME}'''
 
 start_time = time.time()
 conn_lock = threading.Lock()
-# select_time_query = "SELECT time FROM " + DB_NAME + "." + TABLE_NAME + " ORDER BY time DESC LIMIT 1"
 select_time_query = "SELECT MAX(time) FROM " + DB_NAME + "." + TABLE_NAME
 
-# SELECT MAX(TIME) FROM `DB.TABLE||cdc `
-# USING
-#     URL 'minio://127.0.0.1:9000/foxlakebucket/storage_sync_lag_101/syncdb_test_1113/foxdt/'
-#         CREDENTIALS = (            access_key_id = 'ROOTUSER'
-#             secret_access_key = 'CHANGEME123'
-# )
-#         FILES = ('cdc/test/log/')
-#         FILE_FORMAT = (            type = 'DML_CHANGE_LOG'
-#             for_internal_sql = false
-# )
-select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
-
-select_time_query_cdc_real = ''' \
-WITH t_cdc_last AS( \
-  SELECT \
-  	LAST(pk ORDER BY `cdc_log_sequence `) AS pk,  \
-  	LAST(str ORDER BY `cdc_log_sequence `) AS str,  \
-    LAST(num ORDER BY `cdc_log_sequence `) AS num,  \
-  	LAST(name ORDER BY `cdc_log_sequence `) AS name,  \
-  	LAST(time ORDER BY `cdc_log_sequence `) AS time,  \
-  	LAST(`cdc_action ` ORDER BY `cdc_log_sequence `) AS `cdc_action ` \
-  FROM `test||cdc `''' + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)" + '''GROUP BY pk \
-), \
-test_new AS( \
-SELECT \
-	COALESCE(t_cdc_last.pk, test.pk) AS pk, \
-	COALESCE(t_cdc_last.str, test.str) AS str, \
-    COALESCE(t_cdc_last.num, test.num) AS num, \
-	COALESCE(t_cdc_last.name, test.name) AS name, \
-    COALESCE(t_cdc_last.time, test.time) AS time, \
-    COALESCE(t_cdc_last.`cdc_action `, -1) AS `cdc_action_new ` \
-FROM test \
-FULL JOIN t_cdc_last \
-ON test.pk = t_cdc_last.pk \
-GROUP BY pk \
-HAVING `cdc_action_new ` = -1 OR `cdc_action_new ` = 1 OR `cdc_action_new ` = 0 \
-) \
-SELECT MAX(time) FROM test_new;
-'''
+select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''s3c://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
 
 lags = []
 qpss = []
@@ -88,7 +49,7 @@ times = []
     Wait for synchronization completed.
     `timewait` should better be a little bigger than `flushInterval` in foxdt.
 """
-def wait_sync(foxlake_cursor, interval: float=1, timewait=10, timeout=300):
+def wait_sync(foxlake_cursor, interval: float=1, timewait=40, timeout=300):
     begin = time.time()
     prev_applied_id = 0
     while time.time() - begin < timeout:

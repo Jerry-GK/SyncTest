@@ -24,7 +24,7 @@ FOXLAKE_HOST = "127.0.0.1"
 FOXLAKE_PORT = 11288
 FOXLAKE_STORAGE_NAME = "storage_sync_lag_101"
 # FOXLAKE_STORAGE_URI = f'''s3://foxlake/test_sync/{FOXLAKE_STORAGE_NAME}'''
-FOXLAKE_STORAGE_URI = f'''minio://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
+FOXLAKE_STORAGE_URI = f'''s3c://foxlakebucket/{FOXLAKE_STORAGE_NAME}'''
 # FOXLAKE_STORAGE_ENDPOINT = "s3.cn-northwest-1.amazonaws.com.cn"
 FOXLAKE_STORAGE_ENDPOINT = "127.0.0.1:9000"
 # FOXLAKE_STORAGE_ID = "AKIAWSVSB2URE6ZU6R5Q"
@@ -42,7 +42,7 @@ select_time_query = "SELECT MAX(time) FROM " + DB_NAME + "." + TABLE_NAME
 
 # SELECT MAX(TIME) FROM `DB.TABLE||cdc `
 # USING
-#     URL 'minio://127.0.0.1:9000/foxlakebucket/storage_sync_lag_101/syncdb_test_1113/foxdt/'
+#     URL 's3c://127.0.0.1:9000/foxlakebucket/storage_sync_lag_101/syncdb_test_1113/foxdt/'
 #         CREDENTIALS = (            access_key_id = 'ROOTUSER'
 #             secret_access_key = 'CHANGEME123'
 # )
@@ -50,7 +50,7 @@ select_time_query = "SELECT MAX(time) FROM " + DB_NAME + "." + TABLE_NAME
 #         FILE_FORMAT = (            type = 'DML_CHANGE_LOG'
 #             for_internal_sql = false
 # )
-select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
+select_time_query_cdc = "SELECT MAX(time) FROM " + "`" + TABLE_NAME + "||cdc `" + " USING URL '" + f'''s3c://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)"
 
 select_time_query_cdc_real = ''' \
 WITH t_cdc_last AS( \
@@ -61,7 +61,7 @@ WITH t_cdc_last AS( \
   	LAST(name ORDER BY `cdc_log_sequence `) AS name,  \
   	LAST(time ORDER BY `cdc_log_sequence `) AS time,  \
   	LAST(`cdc_action ` ORDER BY `cdc_log_sequence `) AS `cdc_action ` \
-  FROM `test||cdc `''' + " USING URL '" + f'''minio://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)" + '''GROUP BY pk \
+  FROM `test||cdc `''' + " USING URL '" + f'''s3c://127.0.0.1:9000/foxlakebucket/{FOXLAKE_STORAGE_NAME}''' + "/" + DB_NAME +"/foxdt/' CREDENTIALS = (" + "access_key_id = '" + FOXLAKE_STORAGE_ID + "' secret_access_key = '" + FOXLAKE_STORAGE_KEY + "') FILES = ('cdc/test/log/') FILE_FORMAT = (type = 'DML_CHANGE_LOG' for_internal_sql = true)" + '''GROUP BY pk \
 ), \
 test_new AS( \
 SELECT \
